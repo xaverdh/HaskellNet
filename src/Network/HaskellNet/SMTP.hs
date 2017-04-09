@@ -59,14 +59,14 @@ module Network.HaskellNet.SMTP
     , closeSMTP
       -- * Other Useful Operations
     , authenticate
-    , sendMail
     , doSMTPPort
     , doSMTP
     , doSMTPStream
-    , sendPlainTextMail
-    , sendMimeMail
-    , sendMimeMail'
-    , sendMimeMail2
+    , sendMailCustom
+    , sendMail
+    -- , sendPlainTextMail
+    -- , sendMimeMail
+    -- , sendMimeMail'
     )
     where
 
@@ -134,6 +134,12 @@ data Response = Ok
               | MailboxNotAllowed
               | TransactionFailed
                 deriving (Show, Eq)
+
+type From = String
+
+type Receiver = String
+
+type Subject = String
 
 -- | connecting SMTP server with the specified name and port number.
 connectSMTPPort :: String     -- ^ name of the server
@@ -268,22 +274,6 @@ authenticate at username password conn  = do
         (code, _) <- sendCommand conn $ AUTH at username password
         return (code == 235)
 
--- | sending a mail to a server. This is achieved by sendMessage.  If
--- something is wrong, it raises an IOexception.
-sendMail :: String     -- ^ sender mail
-         -> [String]   -- ^ receivers
-         -> ByteString -- ^ data
-         -> SMTPConnection
-         -> IO ()
-sendMail sender receivers dat conn = do
-                 sendAndCheck (MAIL sender)
-                 mapM_ (sendAndCheck . RCPT) receivers
-                 sendAndCheck (DATA dat)
-                 return ()
-  where
-    -- Try the command once and @fail@ if the response isn't 250.
-    sendAndCheck cmd = tryCommand conn cmd 1 250
-
 -- | doSMTPPort open a connection, and do an IO action with the
 -- connection, and then close it.
 doSMTPPort :: String -> PortNumber -> (SMTPConnection -> IO a) -> IO a
@@ -300,61 +290,80 @@ doSMTP host = doSMTPPort host 25
 doSMTPStream :: BSStream -> (SMTPConnection -> IO a) -> IO a
 doSMTPStream s = bracket (connectStream s) closeSMTP
 
--- | Send a plain text mail.
-sendPlainTextMail :: String  -- ^ receiver
-                  -> String  -- ^ sender
-                  -> String  -- ^ subject
-                  -> LT.Text -- ^ body
-                  -> SMTPConnection -- ^ the connection
-                  -> IO ()
-sendPlainTextMail to from subject body con = do
-    renderedMail <- renderMail' myMail
-    sendMail from [to] (lazyToStrict renderedMail) con
-    where
-        myMail = simpleMail' (address to) (address from) (T.pack subject) body
-        address = Address Nothing . T.pack
-
--- | Send a mime mail. The attachments are included with the file path.
-sendMimeMail :: String               -- ^ receiver
-             -> String               -- ^ sender
-             -> String               -- ^ subject
-             -> LT.Text              -- ^ plain text body
-             -> LT.Text              -- ^ html body
-             -> [(T.Text, FilePath)] -- ^ attachments: [(content_type, path)]
-             -> SMTPConnection
-             -> IO ()
-sendMimeMail to from subject plainBody htmlBody attachments con = do
-  myMail <- simpleMail (address to) (address from) (T.pack subject)
-            plainBody htmlBody attachments
-  renderedMail <- renderMail' myMail
-  sendMail from [to] (lazyToStrict renderedMail) con
+-- | sending a mail to a server. This is achieved by sendMessage.  If
+-- something is wrong, it raises an IOexception.
+sendMailCustom :: From     -- ^ sender mail
+         -> [Receiver]   -- ^ receivers
+         -> ByteString -- ^ data
+         -> SMTPConnection
+         -> IO ()
+sendMailCustom sender receivers dat conn = do
+                 sendAndCheck (MAIL sender)
+                 mapM_ (sendAndCheck . RCPT) receivers
+                 sendAndCheck (DATA dat)
+                 return ()
   where
-    address = Address Nothing . T.pack
+    -- Try the command once and @fail@ if the response isn't 250.
+    sendAndCheck cmd = tryCommand conn cmd 1 250
 
--- | Send a mime mail. The attachments are included with in-memory 'ByteString'.
-sendMimeMail' :: String                         -- ^ receiver
-              -> String                         -- ^ sender
-              -> String                         -- ^ subject
-              -> LT.Text                        -- ^ plain text body
-              -> LT.Text                        -- ^ html body
-              -> [(T.Text, T.Text, B.ByteString)] -- ^ attachments: [(content_type, file_name, content)]
-              -> SMTPConnection
-              -> IO ()
-sendMimeMail' to from subject plainBody htmlBody attachments con = do
-  let myMail = simpleMailInMemory (address to) (address from) (T.pack subject)
-                                  plainBody htmlBody attachments
-  sendMimeMail2 myMail con
-  where
-    address = Address Nothing . T.pack
-
-sendMimeMail2 :: Mail -> SMTPConnection -> IO ()
-sendMimeMail2 mail con = do
+sendMail :: Mail -> SMTPConnection -> IO ()
+sendMail mail con = do
     let (Address _ from) = mailFrom mail
         recps = map (T.unpack . addressEmail)
                      $ (mailTo mail ++ mailCc mail ++ mailBcc mail)
     when (null recps) $ fail "no receiver specified."
     renderedMail <- renderMail' $ mail { mailBcc = [] }
-    sendMail (T.unpack from) recps (lazyToStrict renderedMail) con
+    sendMailCustom (T.unpack from) recps (lazyToStrict renderedMail) con
+
+{- Should this really be part of this library ?
+
+-- | Send a plain text mail.
+sendPlainTextMail :: From  -- ^ sender
+                  -> Receiver  -- ^ receivers
+                  -> Subject  -- ^ subject
+                  -> LT.Text -- ^ body
+                  -> SMTPConnection -- ^ the connection
+                  -> IO ()
+sendPlainTextMail from to subject body con = do
+    renderedMail <- renderMail' myMail
+    sendMailCustom from to (lazyToStrict renderedMail) con
+    where
+        myMail = simpleMail' (address to) (address from) (T.pack subject) body
+        address = Address Nothing . T.pack
+
+-- | Send a mime mail. The attachments are loaded from the file path.
+sendMimeMail :: From                 -- ^ sender
+             -> Receiver             -- ^ receiver
+             -> Subject              -- ^ subject
+             -> LT.Text              -- ^ plain text body
+             -> LT.Text              -- ^ html body
+             -> [(T.Text, FilePath)] -- ^ attachments: [(content_type, path)]
+             -> SMTPConnection
+             -> IO ()
+sendMimeMail from to subject plainBody htmlBody attachments con = do
+  myMail <- simpleMail (address to) (address from) (T.pack subject)
+            plainBody htmlBody attachments
+  renderedMail <- renderMail' myMail
+  sendMailCustom from [to] (lazyToStrict renderedMail) con
+  where
+    address = Address Nothing . T.pack
+
+-- | Send a mime mail. The attachments are included with in-memory 'ByteString'.
+sendMimeMail' :: From                           -- ^ sender
+              -> Receiver                       -- ^ receiver
+              -> Subject                        -- ^ subject
+              -> LT.Text                        -- ^ plain text body
+              -> LT.Text                        -- ^ html body
+              -> [(T.Text, T.Text, B.ByteString)] -- ^ attachments: [(content_type, file_name, content)]
+              -> SMTPConnection
+              -> IO ()
+sendMimeMail' from to subject plainBody htmlBody attachments con = do
+  let myMail = simpleMailInMemory (address to) (address from) (T.pack subject)
+                                  plainBody htmlBody attachments
+  sendMimeMail2 myMail con
+  where
+    address = Address Nothing . T.pack
+-}
 
 -- haskellNet uses strict bytestrings
 -- TODO: look at making haskellnet lazy
