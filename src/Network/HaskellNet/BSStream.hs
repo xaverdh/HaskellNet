@@ -10,38 +10,39 @@ where
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import System.IO
+import Control.Monad.IO.Class
 
 -- |A byte string stream.
-data BSStream =
-    BSStream { bsGetLine :: IO ByteString
+data BSStream m =
+    BSStream { bsGetLine :: m ByteString
              -- ^Read a line from the stream.  Should return the line
              -- which was read, including the newline.
-             , bsGet :: Int -> IO ByteString
+             , bsGet :: Int -> m ByteString
              -- ^Read the specified number of bytes from the stream.
              -- Should block until the requested bytes can be read.
-             , bsPut :: ByteString -> IO ()
+             , bsPut :: ByteString -> m ()
              -- ^Write the specified byte string to the stream.
              -- Should flush the stream after writing.
-             , bsFlush :: IO ()
+             , bsFlush :: m ()
              -- ^Flush the stream.
-             , bsClose :: IO ()
+             , bsClose :: m ()
              -- ^Close the stream.
-             , bsIsOpen :: IO Bool
+             , bsIsOpen :: m Bool
              -- ^Is the stream open?
-             , bsWaitForInput :: Int -> IO Bool
+             , bsWaitForInput :: Int -> m Bool
              -- ^Is data available?
              }
 
 -- |Build a byte string stream which operates on a 'Handle'.
-handleToStream :: Handle -> BSStream
+handleToStream :: MonadIO m => Handle -> BSStream m
 handleToStream h =
-    BSStream { bsGetLine = BS.hGetLine h
-             , bsGet = BS.hGet h
-             , bsPut = \s -> BS.hPut h s >> hFlush h
-             , bsFlush = hFlush h
-             , bsClose = do
+    BSStream { bsGetLine = liftIO $ BS.hGetLine h
+             , bsGet = liftIO . BS.hGet h
+             , bsPut = \s -> liftIO $ BS.hPut h s >> hFlush h
+             , bsFlush = liftIO $ hFlush h
+             , bsClose = liftIO $ do
                  op <- hIsOpen h
                  if op then (hClose h) else return ()
-             , bsIsOpen = hIsOpen h
-             , bsWaitForInput = hWaitForInput h
+             , bsIsOpen = liftIO $ hIsOpen h
+             , bsWaitForInput = liftIO . hWaitForInput h
              }

@@ -38,46 +38,46 @@ import Network.HaskellNet.IMAP.Types
     , UID
     )
 
-data IMAPConnection =
-    IMAPC { stream :: BSStream
+data IMAPConnection m =
+    IMAPC { stream :: BSStream m
           , mboxInfo :: IORef MailboxInfo
           , nextCommandNum :: IORef Int
           }
 
-newConnection :: BSStream -> IO IMAPConnection
+newConnection :: BSStream IO -> IO (IMAPConnection IO)
 newConnection s = IMAPC s <$> (newIORef emptyMboxInfo) <*> (newIORef 0)
 
-getMailboxInfo :: IMAPConnection -> IO MailboxInfo
+getMailboxInfo :: IMAPConnection IO -> IO MailboxInfo
 getMailboxInfo c = readIORef $ mboxInfo c
 
-mailbox :: IMAPConnection -> IO MailboxName
+mailbox :: IMAPConnection IO -> IO MailboxName
 mailbox c = _mailbox <$> getMailboxInfo c
 
-exists :: IMAPConnection -> IO Integer
+exists :: IMAPConnection IO -> IO Integer
 exists c = _exists <$> getMailboxInfo c
 
-recent :: IMAPConnection -> IO Integer
+recent :: IMAPConnection IO -> IO Integer
 recent c = _recent <$> getMailboxInfo c
 
-flags :: IMAPConnection -> IO [Flag]
+flags :: IMAPConnection IO -> IO [Flag]
 flags c = _flags <$> getMailboxInfo c
 
-permanentFlags :: IMAPConnection -> IO [Flag]
+permanentFlags :: IMAPConnection IO -> IO [Flag]
 permanentFlags c = _permanentFlags <$> getMailboxInfo c
 
-isWritable :: IMAPConnection -> IO Bool
+isWritable :: IMAPConnection IO -> IO Bool
 isWritable c = _isWritable <$> getMailboxInfo c
 
-isFlagWritable :: IMAPConnection -> IO Bool
+isFlagWritable :: IMAPConnection IO -> IO Bool
 isFlagWritable c = _isFlagWritable <$> getMailboxInfo c
 
-uidNext :: IMAPConnection -> IO UID
+uidNext :: IMAPConnection IO -> IO UID
 uidNext c = _uidNext <$> getMailboxInfo c
 
-uidValidity :: IMAPConnection -> IO UID
+uidValidity :: IMAPConnection IO -> IO UID
 uidValidity c = _uidValidity <$> getMailboxInfo c
 
-withNextCommandNum :: IMAPConnection -> (Int -> IO a) -> IO (a, Int)
+withNextCommandNum :: IMAPConnection IO -> (Int -> IO a) -> IO (a, Int)
 withNextCommandNum c act = do
   let ref = nextCommandNum c
   num <- readIORef ref
@@ -85,8 +85,8 @@ withNextCommandNum c act = do
   modifyIORef ref (+1)
   return (result, num)
 
-setMailboxInfo :: IMAPConnection -> MailboxInfo -> IO ()
+setMailboxInfo :: IMAPConnection IO -> MailboxInfo -> IO ()
 setMailboxInfo c = writeIORef (mboxInfo c)
 
-modifyMailboxInfo :: IMAPConnection -> (MailboxInfo -> MailboxInfo) -> IO ()
+modifyMailboxInfo :: IMAPConnection IO -> (MailboxInfo -> MailboxInfo) -> IO ()
 modifyMailboxInfo c f = modifyIORef (mboxInfo c) f

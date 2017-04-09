@@ -44,12 +44,7 @@ import Control.Applicative ((<$>))
 import Control.Exception
 import Control.Monad (when, unless)
 
-import Data.List
 import Data.Char (isSpace, isControl)
-
-import System.IO
-
-import Prelude hiding (catch)
 
 import Network.HaskellNet.POP3.Types
 import Network.HaskellNet.POP3.Connection
@@ -83,7 +78,7 @@ connectPop3 :: String -> IO POP3Connection
 connectPop3 = flip connectPop3Port 110
 
 -- | connecting to the pop3 server via a stream
-connectStream :: BSStream -> IO POP3Connection
+connectStream :: BSStream IO -> IO POP3Connection
 connectStream st =
     do (resp, msg) <- response st
        when (resp == Err) $ fail "cannot connect"
@@ -92,7 +87,7 @@ connectStream st =
          then return $ newConnection st (BS.unpack code)
          else return $ newConnection st ""
 
-response :: BSStream -> IO (Response, ByteString)
+response :: BSStream IO -> IO (Response, ByteString)
 response st =
     do reply <- strip <$> bsGetLine st
        if (BS.pack "+OK") `BS.isPrefixOf` reply
@@ -242,11 +237,11 @@ doPop3Port host port execution =
 doPop3 :: String -> (POP3Connection -> IO a) -> IO a
 doPop3 host execution = doPop3Port host 110 execution
 
-doPop3Stream :: BSStream -> (POP3Connection -> IO b) -> IO b
+doPop3Stream :: BSStream IO -> (POP3Connection -> IO b) -> IO b
 doPop3Stream conn execution = bracket (connectStream conn) closePop3 execution
 
 crlf :: BS.ByteString
 crlf = BS.pack "\r\n"
 
-bsPutCrLf :: BSStream -> ByteString -> IO ()
+bsPutCrLf :: BSStream IO -> ByteString -> IO ()
 bsPutCrLf h s = bsPut h s >> bsPut h crlf >> bsFlush h
