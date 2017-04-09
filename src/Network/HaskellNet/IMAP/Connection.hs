@@ -1,5 +1,8 @@
 module Network.HaskellNet.IMAP.Connection
     ( IMAPConnection
+    , HasIMAPConnection(..)
+    , getBSStream
+    , withBSStream
     , withNextCommandNum
     , setMailboxInfo
     , modifyMailboxInfo
@@ -38,55 +41,75 @@ import Network.HaskellNet.IMAP.Types
     , UID
     )
 
+import Control.Monad.IO.Class
+
 data IMAPConnection m =
     IMAPC { stream :: BSStream m
           , mboxInfo :: IORef MailboxInfo
           , nextCommandNum :: IORef Int
           }
 
-newConnection :: BSStream IO -> IO (IMAPConnection IO)
-newConnection s = IMAPC s <$> (newIORef emptyMboxInfo) <*> (newIORef 0)
+class HasIMAPConnection m where
+  getIMAPConnection :: m (IMAPConnection m)
 
-getMailboxInfo :: IMAPConnection IO -> IO MailboxInfo
-getMailboxInfo c = readIORef $ mboxInfo c
+getBSStream :: (Functor m,HasIMAPConnection m) => m (BSStream m)
+getBSStream = stream <$> getIMAPConnection
 
-mailbox :: IMAPConnection IO -> IO MailboxName
-mailbox c = _mailbox <$> getMailboxInfo c
+withBSStream :: (Monad m,HasIMAPConnection m) => (BSStream m -> m a) -> m a
+withBSStream action = do
+  conn <- getIMAPConnection
+  action (stream conn)
 
-exists :: IMAPConnection IO -> IO Integer
-exists c = _exists <$> getMailboxInfo c
+newConnection :: MonadIO m => BSStream m -> m (IMAPConnection m)
+newConnection s = IMAPC s <$> liftIO (newIORef emptyMboxInfo) <*> liftIO (newIORef 0)
 
-recent :: IMAPConnection IO -> IO Integer
-recent c = _recent <$> getMailboxInfo c
+getMailboxInfo :: (MonadIO m,HasIMAPConnection m) => m MailboxInfo
+getMailboxInfo = do
+  conn <- getIMAPConnection
+  liftIO $ readIORef $ mboxInfo conn
 
-flags :: IMAPConnection IO -> IO [Flag]
-flags c = _flags <$> getMailboxInfo c
+mailbox :: (MonadIO m,HasIMAPConnection m) => m MailboxName
+mailbox = _mailbox <$> getMailboxInfo
 
-permanentFlags :: IMAPConnection IO -> IO [Flag]
-permanentFlags c = _permanentFlags <$> getMailboxInfo c
+exists :: (MonadIO m,HasIMAPConnection m) => m Integer
+exists = _exists <$> getMailboxInfo 
 
-isWritable :: IMAPConnection IO -> IO Bool
-isWritable c = _isWritable <$> getMailboxInfo c
+recent :: (MonadIO m,HasIMAPConnection m) => m Integer
+recent = _recent <$> getMailboxInfo 
 
-isFlagWritable :: IMAPConnection IO -> IO Bool
-isFlagWritable c = _isFlagWritable <$> getMailboxInfo c
+flags :: (MonadIO m,HasIMAPConnection m) => m [Flag]
+flags = _flags <$> getMailboxInfo 
 
-uidNext :: IMAPConnection IO -> IO UID
-uidNext c = _uidNext <$> getMailboxInfo c
+permanentFlags :: (MonadIO m,HasIMAPConnection m) => m [Flag]
+permanentFlags = _permanentFlags <$> getMailboxInfo 
 
-uidValidity :: IMAPConnection IO -> IO UID
-uidValidity c = _uidValidity <$> getMailboxInfo c
+isWritable :: (MonadIO m,HasIMAPConnection m) => m Bool
+isWritable = _isWritable <$> getMailboxInfo 
 
-withNextCommandNum :: IMAPConnection IO -> (Int -> IO a) -> IO (a, Int)
-withNextCommandNum c act = do
-  let ref = nextCommandNum c
-  num <- readIORef ref
+isFlagWritable :: (MonadIO m,HasIMAPConnection m) => m Bool
+isFlagWritable = _isFlagWritable <$> getMailboxInfo 
+
+uidNext :: (MonadIO m,HasIMAPConnection m) => m UID
+uidNext = _uidNext <$> getMailboxInfo 
+
+uidValidity :: (MonadIO m,HasIMAPConnection m) => m UID
+uidValidity = _uidValidity <$> getMailboxInfo 
+
+withNextCommandNum :: (MonadIO m,HasIMAPConnection m) => (Int -> m a) -> m (a, Int)
+withNextCommandNum act = do
+  conn <- getIMAPConnection
+  let ref = nextCommandNum conn
+  num <- liftIO $ readIORef ref
   result <- act num
-  modifyIORef ref (+1)
+  liftIO $ modifyIORef ref (+1)
   return (result, num)
 
-setMailboxInfo :: IMAPConnection IO -> MailboxInfo -> IO ()
-setMailboxInfo c = writeIORef (mboxInfo c)
+setMailboxInfo :: (MonadIO m,HasIMAPConnection m) => MailboxInfo -> m ()
+setMailboxInfo mboxinfo = do
+  conn <- getIMAPConnection
+  liftIO $ writeIORef (mboxInfo conn) mboxinfo
 
-modifyMailboxInfo :: IMAPConnection IO -> (MailboxInfo -> MailboxInfo) -> IO ()
-modifyMailboxInfo c f = modifyIORef (mboxInfo c) f
+modifyMailboxInfo :: (MonadIO m,HasIMAPConnection m) => (MailboxInfo -> MailboxInfo) -> m ()
+modifyMailboxInfo f = do
+  conn <- getIMAPConnection
+  liftIO $ modifyIORef (mboxInfo conn) f

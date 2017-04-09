@@ -101,8 +101,6 @@ data MailboxStatus = MESSAGES     -- ^ the number of messages in the mailbox
                      deriving (Show, Read, Eq)
 
 
-
-
 data RespDerivs =
     RespDerivs { dvFlags  :: Result RespDerivs [Flag]
                , advTag   :: Result RespDerivs String
