@@ -319,14 +319,14 @@ sendMail mail con = do
 
 -- | Send a plain text mail.
 sendPlainTextMail :: From  -- ^ sender
-                  -> Receiver  -- ^ receivers
+                  -> Receiver  -- ^ receiver
                   -> Subject  -- ^ subject
                   -> LT.Text -- ^ body
                   -> SMTPConnection -- ^ the connection
                   -> IO ()
 sendPlainTextMail from to subject body con = do
     renderedMail <- renderMail' myMail
-    sendMailCustom from to (lazyToStrict renderedMail) con
+    sendMailCustom from [to] (lazyToStrict renderedMail) con
     where
         myMail = simpleMail' (address to) (address from) (T.pack subject) body
         address = Address Nothing . T.pack
