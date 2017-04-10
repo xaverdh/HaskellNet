@@ -83,6 +83,7 @@ data StatusCode = ALERT
                 | UIDNEXT_sc UID
                 | UIDVALIDITY_sc UID
                 | UNSEEN_sc Integer
+                | OtherStatusCode String (Maybe String)
                   deriving (Eq, Show)
 
 data ServerResponse = OK (Maybe StatusCode) String
