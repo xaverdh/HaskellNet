@@ -176,6 +176,9 @@ Parser pDone = do tag <- Parser advTag
                      , do { string "UIDVALIDITY" >> space
                           ; num <- many1 digit
                           ; return $ UIDVALIDITY_sc $ read num }
+                     , do { codeName <- many1 atomChar
+                          ; body <- optional $ space >> many1 (noneOf "\r\n]")
+                          ; return $ OtherStatusCode codeName body }
                      ]
           parenWords = between (space >> char '(') (char ')')
                          (many1 (noneOf " )") `sepBy1` space)
